@@ -48,7 +48,7 @@ We use a **hybrid optimization approach** combining two powerful algorithms:
 - `population`: Estimated population in the zone
 - `ev_density`: Fraction of population that owns EVs (0.02-0.06, i.e., 2-6%)
 - `demand`: Total EV demand = population × ev_density
-- `avg_income`: Average household income (INR per year) - used for demand estimation
+  
 
 **How it's obtained:**
 - Primary: Fetched from OpenStreetMap (OSM) using `osmnx` library
