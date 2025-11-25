@@ -357,9 +357,11 @@ class EVCSVisualizer:
         cbar1.set_label('Annual Profit (INR)', fontsize=10, fontweight='bold')
         
         # Cost vs Profit (colored by coverage)
-        scatter2 = axes[1].scatter(costs, profits, c=coverages, cmap='plasma', s=100, alpha=0.7, edgecolors='black', linewidths=0.5)
-        axes[1].set_xlabel('Total Setup Cost (INR)', fontsize=12, fontweight='bold')
-        axes[1].set_ylabel('Annual Profit (INR)', fontsize=12, fontweight='bold')
+        costs_crore = [c / 1e7 for c in costs]
+        profits_lakh = [p / 1e5 for p in profits]
+        scatter2 = axes[1].scatter(costs_crore, profits_lakh, c=coverages, cmap='plasma', s=100, alpha=0.7, edgecolors='black', linewidths=0.5)
+        axes[1].set_xlabel('Total Setup Cost (Crore INR)', fontsize=12, fontweight='bold')
+        axes[1].set_ylabel('Annual Profit (Lakh INR)', fontsize=12, fontweight='bold')
         axes[1].set_title('Cost vs Profit Trade-off\n(Color = Coverage)', fontsize=13, fontweight='bold')
         axes[1].grid(True, alpha=0.3, linestyle='--')
         cbar2 = plt.colorbar(scatter2, ax=axes[1])
@@ -452,17 +454,17 @@ class EVCSVisualizer:
             axes[0, 1].legend()
         
         # 3. Key Metrics Summary
-        total_cost = solution.get('cost', 0) / 1e6  # In millions
+        total_cost_crore = solution.get('cost', 0) / 1e7  # In crore INR
         total_coverage = sum(m['coverage'] for m in site_metrics_list)
-        total_profit = sum(m['annual_profit'] for m in site_metrics_list) / 1e6  # In millions
+        total_profit_crore = sum(m['annual_profit'] for m in site_metrics_list) / 1e7  # In crore INR
         avg_distance = solution.get('avg_distance', 0)
-        total_upgrade_cost = sum(m['grid_upgrade_cost'] for m in site_metrics_list) / 1e6  # In millions
+        total_upgrade_lakh = sum(m['grid_upgrade_cost'] for m in site_metrics_list) / 1e5  # In lakh INR
  
         metrics = {
-            'Total Cost\n(Millions)': total_cost,
+            'Total Cost\n(Crore INR)': total_cost_crore,
             'Coverage\n(EVs)': total_coverage / 1000,  # In thousands
-            'Profit\n(Millions)': total_profit,
-            'Upgrade Cost\n(Millions)': total_upgrade_cost,
+            'Profit\n(Crore INR)': total_profit_crore,
+            'Upgrade Cost\n(Lakh INR)': total_upgrade_lakh,
             'Avg Distance\n(km)': avg_distance
         }
         
@@ -478,8 +480,10 @@ class EVCSVisualizer:
         # Add value labels on bars
         for bar, val, name in zip(bars, metric_values, metric_names):
             height = bar.get_height()
-            if 'Cost' in name or 'Profit' in name or 'Upgrade' in name:
-                label = f'₹{val:.2f}M'
+            if 'Total Cost' in name or 'Profit' in name:
+                label = f'₹{val:.2f} Cr'
+            elif 'Upgrade' in name:
+                label = f'₹{val:.2f} L'
             elif 'Coverage' in name:
                 label = f'{val:.1f}K EVs'
             else:
@@ -490,8 +494,10 @@ class EVCSVisualizer:
         # 4. Coverage vs Profit Scatter (colored by demand category)
         site_coverages = [m['coverage'] for m in site_metrics_list]
         site_profits = [m['annual_profit'] for m in site_metrics_list]
+        site_profit_lakh = [p / 1e5 for p in site_profits]
         site_categories = [m['demand_category'] for m in site_metrics_list]
         grid_ok_flags = [m['grid_capacity_ok'] for m in site_metrics_list]
+        category_colors = {'High': '#2ecc71', 'Medium': '#3498db', 'Low': '#f39c12', 'Very Low': '#e74c3c'}
         scatter_colors = [category_colors.get(cat, '#999999') for cat in site_categories]
 
         ok_indices = [i for i, ok in enumerate(grid_ok_flags) if ok]
@@ -500,20 +506,20 @@ class EVCSVisualizer:
         if ok_indices:
             axes[1, 1].scatter(
                 [site_coverages[i] for i in ok_indices],
-                [site_profits[i] for i in ok_indices],
+                [site_profit_lakh[i] for i in ok_indices],
                 c=[scatter_colors[i] for i in ok_indices],
                 s=90, alpha=0.7, edgecolors='black', linewidths=0.6, marker='o'
             )
         if upgrade_indices:
             axes[1, 1].scatter(
                 [site_coverages[i] for i in upgrade_indices],
-                [site_profits[i] for i in upgrade_indices],
+                [site_profit_lakh[i] for i in upgrade_indices],
                 c=[scatter_colors[i] for i in upgrade_indices],
                 s=140, alpha=0.85, edgecolors='black', linewidths=1.2, marker='X'
             )
 
         axes[1, 1].set_xlabel('Coverage (EVs)', fontsize=11, fontweight='bold')
-        axes[1, 1].set_ylabel('Annual Profit (INR)', fontsize=11, fontweight='bold')
+        axes[1, 1].set_ylabel('Annual Profit (Lakh INR)', fontsize=11, fontweight='bold')
         axes[1, 1].set_title('Coverage vs Profit\n(Color = Demand Category)', fontsize=12, fontweight='bold')
         axes[1, 1].grid(True, alpha=0.3, linestyle='--')
 
@@ -533,5 +539,46 @@ class EVCSVisualizer:
         plt.tight_layout()
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         print(f"[OK] Solution summary plot saved to {output_path}")
+        plt.close()
+
+    def plot_convergence(self, convergence_history: List[Dict], output_path: str = "nsga2_convergence.png"):
+        """
+        Plot NSGA-II convergence trends generation by generation.
+        """
+        if not convergence_history:
+            print("Warning: No convergence history to plot.")
+            return
+
+        history_df = pd.DataFrame(convergence_history)
+        generations = history_df['generation']
+
+        fig, axes = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
+        fig.suptitle('NSGA-II Evolution Across Generations', fontsize=16, fontweight='bold')
+
+        # Cost evolution (normalize for readability)
+        axes[0].plot(generations, history_df['mean_cost'] / 1e7, label='Mean Cost', color='#3498db', linewidth=2)
+        axes[0].plot(generations, history_df['best_cost'] / 1e7, label='Best Cost', color='#1f618d', linestyle='--', linewidth=2)
+        axes[0].set_ylabel('Cost (Crore INR)', fontsize=11, fontweight='bold')
+        axes[0].grid(True, alpha=0.3)
+        axes[0].legend(loc='upper right')
+
+        # Coverage evolution
+        axes[1].plot(generations, history_df['mean_coverage'], label='Mean Coverage', color='#2ecc71', linewidth=2)
+        axes[1].scatter(generations, history_df['best_coverage'], label='Best Coverage', color='#196f3d', s=35, zorder=3)
+        axes[1].set_ylabel('Coverage (EVs)', fontsize=11, fontweight='bold')
+        axes[1].grid(True, alpha=0.3)
+        axes[1].legend(loc='upper right')
+
+        # Distance evolution
+        axes[2].plot(generations, history_df['mean_distance'], label='Mean Avg Distance', color='#e67e22', linewidth=2)
+        axes[2].plot(generations, history_df['best_distance'], label='Best Avg Distance', color='#ba4a00', linestyle='--', linewidth=2)
+        axes[2].set_xlabel('Generation', fontsize=12, fontweight='bold')
+        axes[2].set_ylabel('Average Distance (km)', fontsize=11, fontweight='bold')
+        axes[2].grid(True, alpha=0.3)
+        axes[2].legend(loc='upper right')
+
+        plt.tight_layout(rect=[0, 0, 1, 0.97])
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        print(f"[OK] NSGA-II convergence plot saved to {output_path}")
         plt.close()
 

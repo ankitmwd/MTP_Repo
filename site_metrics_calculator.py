@@ -14,6 +14,58 @@ import pandas as pd
 from typing import Dict, Tuple
 
 
+PROXIMITY_PENALTY_RADIUS_KM = 2.5
+PROXIMITY_PENALTY_STRENGTH = 0.35
+
+
+def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Return great-circle distance in kilometers."""
+    R = 6371.0
+    lat1_rad, lon1_rad = np.radians(lat1), np.radians(lon1)
+    lat2_rad, lon2_rad = np.radians(lat2), np.radians(lon2)
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1_rad) * np.cos(lat2_rad) * np.sin(dlon / 2.0) ** 2
+    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+    return R * c
+
+
+def compute_proximity_penalty_factor(site_idx: int,
+                                     selected_sites: np.ndarray,
+                                     candidate_sites: pd.DataFrame,
+                                     radius_km: float = PROXIMITY_PENALTY_RADIUS_KM,
+                                     strength: float = PROXIMITY_PENALTY_STRENGTH) -> float:
+    """
+    Compute demand dilution factor due to nearby selected stations.
+    Returns a multiplier in [0, 1].
+    """
+    if candidate_sites is None or len(candidate_sites) == 0:
+        return 1.0
+    
+    selected_mask = np.array(selected_sites).astype(int)
+    selected_indices = np.where(selected_mask == 1)[0]
+    if len(selected_indices) <= 1 or site_idx not in selected_indices:
+        return 1.0
+    
+    site = candidate_sites.iloc[site_idx]
+    lat1 = float(site['latitude'])
+    lon1 = float(site['longitude'])
+    
+    penalty = 0.0
+    for other_idx in selected_indices:
+        if other_idx == site_idx:
+            continue
+        other_site = candidate_sites.iloc[other_idx]
+        lat2 = float(other_site['latitude'])
+        lon2 = float(other_site['longitude'])
+        dist = _haversine_distance(lat1, lon1, lat2, lon2)
+        if dist < radius_km:
+            penalty += max(0.0, (radius_km - dist) / radius_km)
+    
+    penalty_factor = max(0.2, 1.0 - strength * penalty)
+    return penalty_factor
+
+
 def calculate_site_metrics(site_idx: int, 
                          selected_sites: np.ndarray,
                          candidate_sites: pd.DataFrame,
@@ -155,6 +207,16 @@ def calculate_site_metrics(site_idx: int,
             if coverage > 0:
                 density = coverage / (np.pi * 7.0 * 7.0)
     
+    # Apply proximity penalty
+    competition_factor = compute_proximity_penalty_factor(
+        site_idx=site_idx,
+        selected_sites=selected_sites,
+        candidate_sites=candidate_sites
+    )
+    if competition_factor < 1.0:
+        coverage *= competition_factor
+        density *= competition_factor
+    
     # Calculate profit
     utilization_rate = 0.3
     if coverage > 0:
@@ -217,6 +279,7 @@ def calculate_site_metrics(site_idx: int,
         'grid_capacity_ok': bool(site.get('grid_capacity_ok', True)),
         'site_type': site.get('site_type', 'unknown'),
         'demand_category': demand_category,
-        'min_distance': min_distance_to_demand
+        'min_distance': min_distance_to_demand,
+        'competition_penalty': 1.0 - competition_factor
     }
 

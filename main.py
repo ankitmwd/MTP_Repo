@@ -50,6 +50,7 @@ def main():
     
     solution_result = optimizer.solve()
     best_solution = solution_result['best_solution']
+    convergence_history = solution_result.get('convergence_history', [])
     
     # ====================================================================
     # STEP 3: Visualize Results
@@ -75,6 +76,12 @@ def main():
         solution=best_solution,
         output_path="solution_summary.png"
     )
+
+    if convergence_history:
+        visualizer.plot_convergence(
+            convergence_history=convergence_history,
+            output_path="nsga2_convergence.png"
+        )
     
     # ====================================================================
     # STEP 4: Output Results
@@ -128,6 +135,11 @@ def main():
     solution_df = pd.DataFrame(solution_rows)
     solution_df.to_csv('optimal_solution.csv', index=False)
     print("[OK] Solution saved to optimal_solution.csv with all metrics")
+    
+    if convergence_history:
+        convergence_df = pd.DataFrame(convergence_history)
+        convergence_df.to_csv('nsga2_convergence.csv', index=False)
+        print("[OK] NSGA-II convergence history saved to nsga2_convergence.csv")
 
     total_upgrade_cost = solution_df['grid_upgrade_cost_inr'].sum() if 'grid_upgrade_cost_inr' in solution_df.columns else 0.0
     upgrade_site_count = int((solution_df['grid_capacity_ok'] == False).sum()) if 'grid_capacity_ok' in solution_df.columns else 0
@@ -145,12 +157,17 @@ def main():
     print("SOLUTION SUMMARY")
     print("="*60)
     print(f"\nSelected Charging Stations: {best_solution['n_sites']}")
+    total_cost_crore = best_solution['cost'] / 1e7
+    upgrade_cost_lakh = total_upgrade_cost / 1e5
+    expected_revenue_lakh = best_solution['revenue'] / 1e5
+    expected_profit_lakh = best_solution['profit'] / 1e5
+    
     print(f"\nFinancial Metrics:")
-    print(f"  Total Setup Cost: {best_solution['cost']:,.2f} INR")
-    print(f"  Grid Upgrade Cost: {total_upgrade_cost:,.2f} INR")
+    print(f"  Total Setup Cost: {total_cost_crore:.2f} Cr INR")
+    print(f"  Grid Upgrade Cost: {upgrade_cost_lakh:.2f} Lakh INR")
     print(f"  Sites Needing Upgrades: {upgrade_site_count}")
-    print(f"  Expected Revenue: {best_solution['revenue']:,.2f} INR")
-    print(f"  Expected Profit: {best_solution['profit']:,.2f} INR")
+    print(f"  Expected Revenue: {expected_revenue_lakh:.2f} Lakh INR")
+    print(f"  Expected Profit: {expected_profit_lakh:.2f} Lakh INR")
     print(f"  ROI: {(best_solution['profit'] / best_solution['cost'] * 100):.2f}%")
     
     print(f"\nCoverage Metrics:")
@@ -177,6 +194,8 @@ def main():
     print("  - evcs_map.png (static map with labeled stations)")
     print("  - objectives_tradeoff.png (Pareto front)")
     print("  - solution_summary.png (solution metrics)")
+    if convergence_history:
+        print("  - nsga2_convergence.png (generation-by-generation evolution)")
     print("  - optimal_solution.csv (selected sites)")
     print("\nView evcs_map.png to see the optimized charging station locations!")
 

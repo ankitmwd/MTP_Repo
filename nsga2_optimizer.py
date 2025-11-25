@@ -62,11 +62,19 @@ class NSGA2Optimizer:
         self.n_sites = len(self.candidate_sites)
         self.population_size = population_size
         self.n_generations = n_generations
+        self.convergence_history: List[Dict[str, float]] = []
         
         # Problem parameters
         self.max_service_distance = 5.0  # km
         self.operating_cost_per_kwh = 4.0  # INR per kWh
-        self.budget = 50000000  # Total budget in INR
+        self.budget = 600000000  # 60 Crore INR budget to allow 60-100 sites
+        self.min_sites = 60
+        self.max_sites = min(100, self.n_sites)
+
+        self.cost_column = 'total_setup_cost' if 'total_setup_cost' in self.candidate_sites.columns else 'setup_cost'
+        self.site_costs = self.candidate_sites[self.cost_column].values.astype(float)
+        self.sorted_site_indices = list(np.argsort(self.site_costs))
+        self.cheapest_site_idx = int(self.sorted_site_indices[0])
         
         # Setup DEAP
         self._setup_deap()
@@ -92,10 +100,15 @@ class NSGA2Optimizer:
         
         self.toolbox = base.Toolbox()
         
-        # Individual: binary vector (1 = site selected, 0 = not selected)
-        self.toolbox.register("attr_bool", random.randint, 0, 1)
-        self.toolbox.register("individual", tools.initRepeat, creator.Individual,
-                             self.toolbox.attr_bool, n=self.n_sites)
+        def _generate_individual():
+            target = random.randint(self.min_sites, self.max_sites)
+            indices = random.sample(range(self.n_sites), target)
+            genes = [0] * self.n_sites
+            for idx in indices:
+                genes[idx] = 1
+            return creator.Individual(genes)
+        
+        self.toolbox.register("individual", _generate_individual)
         self.toolbox.register("population", tools.initRepeat, list, 
                              self.toolbox.individual)
         
@@ -124,14 +137,23 @@ class NSGA2Optimizer:
         selected_indices = np.where(selected_sites == 1)[0]
         
         # Objective 1: Total cost
-        total_cost = 0.0
-        cost_column = 'total_setup_cost' if 'total_setup_cost' in self.candidate_sites.columns else 'setup_cost'
-        for j in selected_indices:
-            total_cost += self.candidate_sites.iloc[j][cost_column]
+        total_cost = self.site_costs[selected_indices].sum()
         
+        # Enforce site count bounds
+        site_count = len(selected_indices)
+        if site_count < self.min_sites:
+            shortage = self.min_sites - site_count
+            penalty = 1e9 * shortage
+            return (1e10 + penalty, 0.0, 1e3)
+        if site_count > self.max_sites:
+            excess = site_count - self.max_sites
+            penalty = 1e9 * excess
+            return (1e10 + penalty, 0.0, 1e3)
+
         # Budget constraint penalty
         if total_cost > self.budget:
-            return (1e10, -1e10, 1e10)  # Penalize infeasible solutions
+            penalty = 1e8 * (total_cost - self.budget) / self.budget
+            return (1e10 + penalty, -1e10, 1e10)  # Penalize infeasible solutions
         
         # Objective 2: Coverage (demand served)
         total_coverage = 0.0
@@ -158,9 +180,80 @@ class NSGA2Optimizer:
         # Objective 3: Average distance (only for covered zones)
         avg_distance = total_distance / max(zones_covered, 1)
         
+        # Penalize solutions that cover nothing
+        if total_coverage <= 0:
+            return (1e9, 0.0, 1e3)
+        
         # Return: (cost, -coverage, avg_distance)
         # Coverage negated because DEAP maximizes, but we want to maximize coverage
         return (total_cost, -total_coverage, avg_distance)
+
+    def _repair_individual(self, individual):
+        """
+        Enforce budget feasibility by turning off random sites until cost <= budget.
+        """
+        selected_indices = [idx for idx, val in enumerate(individual) if val == 1]
+
+        # If nothing selected, start with cheapest feasible site
+        if not selected_indices:
+            individual[self.cheapest_site_idx] = 1
+            selected_indices = [self.cheapest_site_idx]
+
+        total_cost = self.site_costs[selected_indices].sum()
+
+        # Ensure at least min_sites
+        if len(selected_indices) < self.min_sites:
+            for idx in self.sorted_site_indices:
+                if len(selected_indices) >= self.min_sites:
+                    break
+                if individual[idx] == 0:
+                    individual[idx] = 1
+                    selected_indices.append(idx)
+                    total_cost += self.site_costs[idx]
+
+        # Trim to maximum site count (remove most expensive first)
+        while len(selected_indices) > self.max_sites:
+            idx_to_remove = max(selected_indices, key=lambda ix: self.site_costs[ix])
+            individual[idx_to_remove] = 0
+            selected_indices.remove(idx_to_remove)
+            total_cost -= self.site_costs[idx_to_remove]
+
+        # Enforce budget while keeping at least min_sites
+        while total_cost > self.budget and len(selected_indices) > self.min_sites:
+            idx_to_remove = max(selected_indices, key=lambda ix: self.site_costs[ix])
+            individual[idx_to_remove] = 0
+            selected_indices.remove(idx_to_remove)
+            total_cost -= self.site_costs[idx_to_remove]
+
+        # If still above budget (rare), swap expensive sites with cheaper ones
+        if total_cost > self.budget:
+            for idx in self.sorted_site_indices:
+                if idx in selected_indices:
+                    continue
+                # Replace most expensive site with cheaper candidate
+                expensive_idx = max(selected_indices, key=lambda ix: self.site_costs[ix])
+                if self.site_costs[idx] < self.site_costs[expensive_idx]:
+                    individual[expensive_idx] = 0
+                    total_cost -= self.site_costs[expensive_idx]
+                    selected_indices.remove(expensive_idx)
+                    individual[idx] = 1
+                    selected_indices.append(idx)
+                    total_cost += self.site_costs[idx]
+                if total_cost <= self.budget:
+                    break
+
+        # Final guarantee: if we somehow dipped below min_sites, add cheapest remaining
+        if len(selected_indices) < self.min_sites:
+            for idx in self.sorted_site_indices:
+                if individual[idx] == 0:
+                    if total_cost + self.site_costs[idx] <= self.budget:
+                        individual[idx] = 1
+                        selected_indices.append(idx)
+                        total_cost += self.site_costs[idx]
+                if len(selected_indices) >= self.min_sites:
+                    break
+
+        return individual
     
     def solve(self) -> Dict:
         """
@@ -175,8 +268,9 @@ class NSGA2Optimizer:
         print(f"Population size: {self.population_size}")
         print(f"Generations: {self.n_generations}")
         
-        # Initialize population
+        # Initialize population and repair infeasible individuals
         population = self.toolbox.population(n=self.population_size)
+        population = [self._repair_individual(ind) for ind in population]
         
         # Evaluate initial population
         fitnesses = list(map(self.toolbox.evaluate, population))
@@ -184,10 +278,12 @@ class NSGA2Optimizer:
             ind.fitness.values = fit
         
         # Evolution loop
+        self.convergence_history = []
         for generation in range(self.n_generations):
             # Select parents
             offspring = algorithms.varAnd(population, self.toolbox, 
                                          cxpb=0.9, mutpb=0.1)
+            offspring = [self._repair_individual(ind) for ind in offspring]
             
             # Evaluate offspring
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
@@ -199,13 +295,23 @@ class NSGA2Optimizer:
             population = self.toolbox.select(offspring + population, 
                                             self.population_size)
             
+            # Track convergence metrics
+            fits = [ind.fitness.values for ind in population]
+            costs = np.array([f[0] for f in fits], dtype=float)
+            coverages = np.array([-f[1] for f in fits], dtype=float)  # Negate back
+            distances = np.array([f[2] for f in fits], dtype=float)
+            
+            self.convergence_history.append({
+                'generation': generation,
+                'mean_cost': float(np.mean(costs)),
+                'best_cost': float(np.min(costs)),
+                'mean_coverage': float(np.mean(coverages)),
+                'best_coverage': float(np.max(coverages)),
+                'mean_distance': float(np.mean(distances)),
+                'best_distance': float(np.min(distances))
+            })
+            
             if generation % 20 == 0:
-                # Print statistics
-                fits = [ind.fitness.values for ind in population]
-                costs = [f[0] for f in fits]
-                coverages = [-f[1] for f in fits]  # Negate back
-                distances = [f[2] for f in fits]
-                
                 print(f"  Generation {generation}:")
                 print(f"    Cost: {np.mean(costs):.2f} ± {np.std(costs):.2f}")
                 print(f"    Coverage: {np.mean(coverages):.2f} ± {np.std(coverages):.2f}")
@@ -234,6 +340,7 @@ class NSGA2Optimizer:
         
         return {
             'pareto_solutions': solutions,
-            'population': population
+            'population': population,
+            'convergence_history': self.convergence_history
         }
 

@@ -18,6 +18,7 @@ import numpy as np
 from typing import Dict, List
 from benders_decomposition import BendersDecomposition
 from nsga2_optimizer import NSGA2Optimizer
+from site_metrics_calculator import compute_proximity_penalty_factor
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -28,8 +29,8 @@ class HybridOptimizer:
     """
     
     def __init__(self, data: Dict, 
-                 nsga2_generations: int = 50,
-                 benders_iterations: int = 30):
+                 nsga2_generations: int = 150,
+                 benders_iterations: int = 90):
         """
         Initialize hybrid optimizer.
         
@@ -88,7 +89,12 @@ class HybridOptimizer:
             prices[j] = base_price + price_adjustment
             
             # Estimate revenue and cost
-            estimated_demand = demand_density * 0.3  # Assume 30% utilization
+            competition_factor = compute_proximity_penalty_factor(
+                site_idx=j,
+                selected_sites=selected_sites,
+                candidate_sites=self.data['candidate_sites']
+            )
+            estimated_demand = demand_density * 0.3 * competition_factor  # Adjust for cannibalization
             revenue = estimated_demand * prices[j]
             cost = estimated_demand * 4.0  # Operating cost
             
@@ -121,6 +127,13 @@ class HybridOptimizer:
         print("\n[Step 1] Finding Pareto-optimal site selections (NSGA-II)...")
         nsga2_result = self.nsga2.solve()
         pareto_solutions = nsga2_result['pareto_solutions']
+        convergence_history = nsga2_result.get('convergence_history', [])
+        if convergence_history:
+            last_entry = convergence_history[-1]
+            print("  Final generation snapshot:")
+            print(f"    Mean cost: {last_entry['mean_cost']:.0f} INR")
+            print(f"    Mean coverage: {last_entry['mean_coverage']:.1f} EVs")
+            print(f"    Mean distance: {last_entry['mean_distance']:.2f} km")
         
         print(f"  Found {len(pareto_solutions)} Pareto-optimal selections")
         
@@ -167,7 +180,8 @@ class HybridOptimizer:
         return {
             'best_solution': best_solution,
             'pareto_solutions': optimized_solutions,
-            'all_solutions': optimized_solutions
+            'all_solutions': optimized_solutions,
+            'convergence_history': convergence_history
         }
     
     def _select_best_solution(self, solutions: List[Dict]) -> Dict:

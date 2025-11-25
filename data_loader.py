@@ -340,6 +340,38 @@ class IndoreDataLoader:
                 print(f"    Warning: Could not fetch malls: {e}")
             
             # Get fuel stations (good candidates for EVCS conversion)
+            # Get restaurants (new candidate type - good for destination charging)
+            try:
+                gdf_restaurants = ox.features_from_place(
+                    "Indore, Madhya Pradesh, India",
+                    tags={'amenity': 'restaurant'}
+                )
+                if len(gdf_restaurants) > 80:
+                    gdf_restaurants = gdf_restaurants.sample(80, random_state=42)
+                for idx, row in gdf_restaurants.iterrows():
+                    if hasattr(row.geometry, 'centroid'):
+                        centroid = row.geometry.centroid
+                        lat, lon = centroid.y, centroid.x
+                        dist = self._haversine(self.city_center_lat, self.city_center_lon, lat, lon)
+                        if dist <= self.city_radius_km:
+                            capacity = np.random.choice([4, 6, 8], p=[0.4, 0.4, 0.2])
+                            land_cost = 900000 + dist * 35000
+                            setup_cost = land_cost + capacity * 450000
+                            sites.append({
+                                'site_id': site_id,
+                                'latitude': lat,
+                                'longitude': lon,
+                                'land_cost': land_cost,
+                                'capacity': capacity,
+                                'setup_cost': setup_cost,
+                                'max_price': np.random.uniform(9, 13),
+                                'site_type': 'restaurant',
+                                'name': row.get('name', 'Restaurant Site')
+                            })
+                            site_id += 1
+            except Exception as e:
+                print(f"    Warning: Could not fetch restaurants: {e}")
+
             try:
                 gdf_fuel = ox.features_from_place(
                     "Indore, Madhya Pradesh, India",
@@ -549,6 +581,10 @@ class IndoreDataLoader:
             {"name": "Ring Road", "lat": 22.7300, "lon": 75.9000, "type": "fuel_station"},
             {"name": "Super Corridor", "lat": 22.7000, "lon": 75.9000, "type": "parking"},
             {"name": "Ralamandal", "lat": 22.7600, "lon": 75.9000, "type": "parking"},
+            {"name": "56 Dukan Food Street", "lat": 22.7198, "lon": 75.8793, "type": "restaurant"},
+            {"name": "Chappan Bhog Restaurant Hub", "lat": 22.7205, "lon": 75.8810, "type": "restaurant"},
+            {"name": "Sayaji Hotel Complex", "lat": 22.7260, "lon": 75.8830, "type": "restaurant"},
+            {"name": "Nakhrali Dhani", "lat": 22.6440, "lon": 75.8130, "type": "restaurant"}
         ]
         
         sites = []
@@ -569,6 +605,11 @@ class IndoreDataLoader:
             elif loc['type'] == 'fuel_station':
                 capacity = np.random.choice([4, 8, 12], p=[0.2, 0.5, 0.3])
                 land_cost = 1000000 + dist * 45000
+                setup_cost = land_cost + capacity * 450000
+                max_price = np.random.uniform(9, 13)
+            elif loc['type'] == 'restaurant':
+                capacity = np.random.choice([4, 6, 8], p=[0.4, 0.4, 0.2])
+                land_cost = 900000 + dist * 35000
                 setup_cost = land_cost + capacity * 450000
                 max_price = np.random.uniform(9, 13)
             else:  # parking
