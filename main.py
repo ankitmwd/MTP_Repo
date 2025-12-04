@@ -44,7 +44,7 @@ def main():
     print("\n[STEP 2] Running hybrid optimization...")
     optimizer = HybridOptimizer(
         data=data,
-        nsga2_generations=50,
+        nsga2_generations=200,
         benders_iterations=30
     )
     
@@ -75,6 +75,13 @@ def main():
         solution=best_solution,
         output_path="solution_summary.png"
     )
+    
+    # Create convergence graph
+    if 'history' in solution_result:
+        visualizer.plot_convergence(
+            history=solution_result['history'],
+            output_path="convergence_graph.png"
+        )
     
     # ====================================================================
     # STEP 4: Output Results
@@ -177,6 +184,7 @@ def main():
     print("  - evcs_map.png (static map with labeled stations)")
     print("  - objectives_tradeoff.png (Pareto front)")
     print("  - solution_summary.png (solution metrics)")
+    print("  - convergence_graph.png (optimization history)")
     print("  - optimal_solution.csv (selected sites)")
     print("\nView evcs_map.png to see the optimized charging station locations!")
 

@@ -183,6 +183,13 @@ class NSGA2Optimizer:
         for ind, fit in zip(population, fitnesses):
             ind.fitness.values = fit
         
+        # Initialize history tracking
+        history = {
+            'cost_mean': [], 'cost_min': [],
+            'coverage_mean': [], 'coverage_max': [],
+            'distance_mean': [], 'distance_min': []
+        }
+        
         # Evolution loop
         for generation in range(self.n_generations):
             # Select parents
@@ -199,13 +206,21 @@ class NSGA2Optimizer:
             population = self.toolbox.select(offspring + population, 
                                             self.population_size)
             
+            # Record statistics
+            fits = [ind.fitness.values for ind in population]
+            costs = [f[0] for f in fits]
+            coverages = [-f[1] for f in fits]  # Negate back
+            distances = [f[2] for f in fits]
+            
+            history['cost_mean'].append(np.mean(costs))
+            history['cost_min'].append(np.min(costs))
+            history['coverage_mean'].append(np.mean(coverages))
+            history['coverage_max'].append(np.max(coverages))
+            history['distance_mean'].append(np.mean(distances))
+            history['distance_min'].append(np.min(distances))
+            
             if generation % 20 == 0:
                 # Print statistics
-                fits = [ind.fitness.values for ind in population]
-                costs = [f[0] for f in fits]
-                coverages = [-f[1] for f in fits]  # Negate back
-                distances = [f[2] for f in fits]
-                
                 print(f"  Generation {generation}:")
                 print(f"    Cost: {np.mean(costs):.2f} ± {np.std(costs):.2f}")
                 print(f"    Coverage: {np.mean(coverages):.2f} ± {np.std(coverages):.2f}")
@@ -234,6 +249,7 @@ class NSGA2Optimizer:
         
         return {
             'pareto_solutions': solutions,
-            'population': population
+            'population': population,
+            'history': history
         }
 

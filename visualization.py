@@ -492,7 +492,7 @@ class EVCSVisualizer:
         site_profits = [m['annual_profit'] for m in site_metrics_list]
         site_categories = [m['demand_category'] for m in site_metrics_list]
         grid_ok_flags = [m['grid_capacity_ok'] for m in site_metrics_list]
-        scatter_colors = [category_colors.get(cat, '#999999') for cat in site_categories]
+        scatter_colors = [colors_cat.get(cat, '#999999') for cat in site_categories]
 
         ok_indices = [i for i, ok in enumerate(grid_ok_flags) if ok]
         upgrade_indices = [i for i, ok in enumerate(grid_ok_flags) if not ok]
@@ -520,7 +520,7 @@ class EVCSVisualizer:
         # Add legend for categories and grid status
         from matplotlib.patches import Patch
         unique_categories = ['High', 'Medium', 'Low', 'Very Low']
-        category_handles = [Patch(facecolor=category_colors[cat], edgecolor='black', label=cat)
+        category_handles = [Patch(facecolor=colors_cat[cat], edgecolor='black', label=cat)
                             for cat in unique_categories if cat in site_categories]
         status_handles = [
             Line2D([0], [0], marker='o', color='w', markerfacecolor='#666666', markeredgecolor='black',
@@ -533,5 +533,52 @@ class EVCSVisualizer:
         plt.tight_layout()
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         print(f"[OK] Solution summary plot saved to {output_path}")
+        plt.close()
+
+    def plot_convergence(self, history: Dict, output_path: str = "convergence_graph.png"):
+        """
+        Plot convergence graph showing objectives over generations.
+        
+        Parameters:
+        -----------
+        history : Dict
+            Dictionary containing history of objectives
+        output_path : str
+            Path to save plot
+        """
+        print(f"Creating convergence graph...")
+        
+        generations = range(len(history['cost_mean']))
+        
+        fig, axes = plt.subplots(3, 1, figsize=(10, 15), sharex=True)
+        
+        # 1. Cost Convergence
+        axes[0].plot(generations, history['cost_mean'], label='Mean Cost', color='blue', linewidth=2)
+        axes[0].plot(generations, history['cost_min'], label='Min Cost', color='blue', linestyle='--', alpha=0.7)
+        axes[0].set_ylabel('Total Cost (INR)', fontsize=12, fontweight='bold')
+        axes[0].set_title('Cost Convergence', fontsize=14, fontweight='bold')
+        axes[0].grid(True, alpha=0.3)
+        axes[0].legend()
+        
+        # 2. Coverage Convergence
+        axes[1].plot(generations, history['coverage_mean'], label='Mean Coverage', color='green', linewidth=2)
+        axes[1].plot(generations, history['coverage_max'], label='Max Coverage', color='green', linestyle='--', alpha=0.7)
+        axes[1].set_ylabel('Coverage (EVs)', fontsize=12, fontweight='bold')
+        axes[1].set_title('Coverage Convergence', fontsize=14, fontweight='bold')
+        axes[1].grid(True, alpha=0.3)
+        axes[1].legend()
+        
+        # 3. Distance Convergence
+        axes[2].plot(generations, history['distance_mean'], label='Mean Distance', color='red', linewidth=2)
+        axes[2].plot(generations, history['distance_min'], label='Min Distance', color='red', linestyle='--', alpha=0.7)
+        axes[2].set_xlabel('Generation', fontsize=12, fontweight='bold')
+        axes[2].set_ylabel('Avg Distance (km)', fontsize=12, fontweight='bold')
+        axes[2].set_title('Distance Convergence', fontsize=14, fontweight='bold')
+        axes[2].grid(True, alpha=0.3)
+        axes[2].legend()
+        
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        print(f"[OK] Convergence graph saved to {output_path}")
         plt.close()
 
