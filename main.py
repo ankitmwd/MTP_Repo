@@ -44,7 +44,7 @@ def main():
     print("\n[STEP 2] Running hybrid optimization...")
     optimizer = HybridOptimizer(
         data=data,
-        nsga2_generations=50,
+        nsga2_generations=150,  # Updated to 150 generations
         benders_iterations=30
     )
     
@@ -80,7 +80,7 @@ def main():
     if convergence_history:
         visualizer.plot_convergence(
             convergence_history=convergence_history,
-            output_path="nsga2_convergence.png"
+            output_path="convergence_curve.png"  # Renamed as requested
         )
     
     # ====================================================================
@@ -138,8 +138,8 @@ def main():
     
     if convergence_history:
         convergence_df = pd.DataFrame(convergence_history)
-        convergence_df.to_csv('nsga2_convergence.csv', index=False)
-        print("[OK] NSGA-II convergence history saved to nsga2_convergence.csv")
+        convergence_df.to_csv('fitness_log.csv', index=False)  # Renamed as requested
+        print("[OK] Generation fitness log saved to fitness_log.csv")
 
     total_upgrade_cost = solution_df['grid_upgrade_cost_inr'].sum() if 'grid_upgrade_cost_inr' in solution_df.columns else 0.0
     upgrade_site_count = int((solution_df['grid_capacity_ok'] == False).sum()) if 'grid_capacity_ok' in solution_df.columns else 0
@@ -190,12 +190,20 @@ def main():
     print("\n" + "="*60)
     print("OPTIMIZATION COMPLETE!")
     print("="*60)
+    print("\n" + "="*60)
+    print("FINAL RESULT SUMMARY")
+    print("="*60)
+    print(f"Final Best Solution: {best_solution['n_sites']} sites selected")
+    print(f"Final Best Fitness (Profit): {best_solution['profit']:.2f} INR")
+    print(f"Total Generations: 150")
+    
     print("\nOutput files generated:")
     print("  - evcs_map.png (static map with labeled stations)")
     print("  - objectives_tradeoff.png (Pareto front)")
     print("  - solution_summary.png (solution metrics)")
     if convergence_history:
-        print("  - nsga2_convergence.png (generation-by-generation evolution)")
+        print("  - convergence_curve.png (fitness vs generation)")
+        print("  - fitness_log.csv (generation-wise stats)")
     print("  - optimal_solution.csv (selected sites)")
     print("\nView evcs_map.png to see the optimized charging station locations!")
 

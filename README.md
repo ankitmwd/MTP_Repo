@@ -48,7 +48,7 @@ We use a **hybrid optimization approach** combining two powerful algorithms:
 - `population`: Estimated population in the zone
 - `ev_density`: Fraction of population that owns EVs (0.02-0.06, i.e., 2-6%)
 - `demand`: Total EV demand = population × ev_density
-- `avg_income`: Average household income (INR per year) - used for demand estimation
+  
 
 **How it's obtained:**
 - Primary: Fetched from OpenStreetMap (OSM) using `osmnx` library
@@ -76,11 +76,11 @@ name: "Vijay Nagar"
 - `capacity`: Number of charging points (connectors) at the station (4, 8, 12, or 16)
 - `setup_cost`: One-time installation cost including land and equipment (INR)
 - `land_cost`: Cost of land/preparation (INR)
-- `site_type`: Type of location (`"mall"`, `"parking"`, `"fuel_station"`, `"commercial"`)
+- `site_type`: Type of location (`"mall"`, `"parking"`, `"fuel_station"`, `"restaurant"`)
 - `name`: Name of location (if available)
 
 **How it's obtained:**
-- Primary: OSM queries for `amenity=parking`, `shop=mall`, `amenity=fuel`
+- Primary: OSM queries for `amenity=parking`, `shop=mall`, `amenity=fuel`, `amenity=restaurant`
 - Fallback: Predefined list of 15 known Indore locations (C21 Mall, MG Road, etc.)
 - Cost estimation: Based on site type, capacity, and distance from city center
 
@@ -154,12 +154,16 @@ available_kw: 6200
 - `grid_capacity_ok`: Boolean flag (True if grid can support, False if upgrade needed)
 - `distance_to_grid_km`: Distance to nearest grid node
 
-#### **2. Visual Maps** (`evcs_map.png`, `objectives_tradeoff.png`, `solution_summary.png`)
-- **Map visualization** showing selected sites, demand zones, and coverage areas
-- **Pareto front plots** showing trade-offs between objectives
-- **Summary dashboards** with key statistics
+#### **2. Visual Maps & Graphs**
+- **`evcs_map.png`**: Map visualization showing selected sites, demand zones, and coverage areas.
+- **`objectives_tradeoff.png`**: Pareto front plots showing trade-offs between objectives (Cost vs Coverage vs Profit).
+- **`convergence_curve.png`**: Convergence graph showing Best and Average fitness (Cost, Coverage, Distance) over 150 generations.
+- **`solution_summary.png`**: Summary dashboards with key statistics.
 
-#### **3. HTML Report** (`evcs_report.html`)
+#### **3. Logs**
+- **`fitness_log.csv`**: Detailed generation-wise statistics (Best/Avg/Worst for all objectives).
+
+#### **4. HTML Report** (`evcs_report.html`)
 - Comprehensive summary with all metrics, top sites, and recommendations
 
 ---

@@ -68,7 +68,7 @@ class NSGA2Optimizer:
         self.max_service_distance = 5.0  # km
         self.operating_cost_per_kwh = 4.0  # INR per kWh
         self.budget = 600000000  # 60 Crore INR budget to allow 60-100 sites
-        self.min_sites = 60
+        self.min_sites = 5  # Relaxed from 60 to allow dynamic growth
         self.max_sites = min(100, self.n_sites)
 
         self.cost_column = 'total_setup_cost' if 'total_setup_cost' in self.candidate_sites.columns else 'setup_cost'
@@ -78,7 +78,7 @@ class NSGA2Optimizer:
         
         # Setup DEAP
         self._setup_deap()
-        
+
     def _setup_deap(self):
         """Setup DEAP framework for NSGA-II."""
         # Create fitness classes (with error handling for multiple imports)
@@ -254,7 +254,7 @@ class NSGA2Optimizer:
                     break
 
         return individual
-    
+
     def solve(self) -> Dict:
         """
         Solve multi-objective optimization using NSGA-II.
@@ -301,21 +301,32 @@ class NSGA2Optimizer:
             coverages = np.array([-f[1] for f in fits], dtype=float)  # Negate back
             distances = np.array([f[2] for f in fits], dtype=float)
             
-            self.convergence_history.append({
-                'generation': generation,
-                'mean_cost': float(np.mean(costs)),
-                'best_cost': float(np.min(costs)),
-                'mean_coverage': float(np.mean(coverages)),
-                'best_coverage': float(np.max(coverages)),
-                'mean_distance': float(np.mean(distances)),
-                'best_distance': float(np.min(distances))
-            })
+            # Track station counts
+            site_counts = np.array([sum(ind) for ind in population], dtype=float)
             
-            if generation % 20 == 0:
-                print(f"  Generation {generation}:")
-                print(f"    Cost: {np.mean(costs):.2f} ± {np.std(costs):.2f}")
-                print(f"    Coverage: {np.mean(coverages):.2f} ± {np.std(coverages):.2f}")
-                print(f"    Distance: {np.mean(distances):.2f} ± {np.std(distances):.2f}")
+            # Calculate stats
+            stats = {
+                'generation': generation,
+                'best_cost': float(np.min(costs)),
+                'avg_cost': float(np.mean(costs)),
+                'worst_cost': float(np.max(costs)),
+                'best_coverage': float(np.max(coverages)),
+                'avg_coverage': float(np.mean(coverages)),
+                'worst_coverage': float(np.min(coverages)),
+                'best_distance': float(np.min(distances)),
+                'avg_distance': float(np.mean(distances)),
+                'worst_distance': float(np.max(distances)),
+                'avg_sites': float(np.mean(site_counts)),
+                'min_sites': float(np.min(site_counts)),
+                'max_sites': float(np.max(site_counts))
+            }
+            self.convergence_history.append(stats)
+            
+            # Print stats for every generation as requested
+            print(f"Generation {generation}: "
+                  f"Cost [Avg: {stats['avg_cost']:.0f}] | "
+                  f"Coverage [Avg: {stats['avg_coverage']:.0f}] | "
+                  f"Sites [Avg: {stats['avg_sites']:.1f}]")
         
         # Extract Pareto front
         pareto_front = tools.sortNondominated(population, len(population),

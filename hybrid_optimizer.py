@@ -71,36 +71,60 @@ class HybridOptimizer:
         # Simplified pricing optimization
         prices = np.zeros(len(selected_sites))
         total_revenue = 0.0
-        total_cost = 0.0
+        total_operating_cost = 0.0
+        total_maintenance_cost = 0.0
         
         selected_indices = np.where(selected_sites == 1)[0]
         
+        # Revenue parameters (based on real EV charging patterns)
+        charging_sessions_per_ev_per_month = 12.0
+        kwh_per_session = 12.5
+        monthly_kwh_per_ev = charging_sessions_per_ev_per_month * kwh_per_session
+        electricity_cost_per_kwh = 4.0
+        monthly_maintenance_per_site = 5000.0
+        
         for j in selected_indices:
-            # Optimize price for site j
-            # Price based on demand density and competition
-            demand_density = 0
+            # Calculate demand density within service radius
+            demand_density = 0.0
             for i in range(len(self.data['demand_zones'])):
                 if self.data['distance_matrix'][i, j] <= 5.0:
                     demand_density += self.data['demand_zones'].iloc[i]['demand']
             
-            # Optimal price (simplified: balance demand and revenue)
+            # Set optimal price based on demand density
             base_price = 10.0
             price_adjustment = min(demand_density / 1000.0, 3.0)  # Cap adjustment
             prices[j] = base_price + price_adjustment
             
-            # Estimate revenue and cost
+            # Calculate actual served demand with competition factor
             competition_factor = compute_proximity_penalty_factor(
                 site_idx=j,
                 selected_sites=selected_sites,
                 candidate_sites=self.data['candidate_sites']
             )
-            estimated_demand = demand_density * 0.3 * competition_factor  # Adjust for cannibalization
-            revenue = estimated_demand * prices[j]
-            cost = estimated_demand * 4.0  # Operating cost
             
-            total_revenue += revenue
-            total_cost += cost
+            utilization_rate = 0.3  # Conservative utilization
+            if demand_density > 0:
+                utilization_rate = min(0.5, 0.2 + (demand_density / 100.0) * 0.3)
+            
+            estimated_served_evs = demand_density * utilization_rate * competition_factor
+            
+            # Calculate monthly and annual revenue
+            monthly_kwh = estimated_served_evs * monthly_kwh_per_ev
+            monthly_revenue = monthly_kwh * prices[j]
+            monthly_operating_cost = monthly_kwh * electricity_cost_per_kwh
+            monthly_maintenance = monthly_maintenance_per_site
+            monthly_profit = monthly_revenue - monthly_operating_cost - monthly_maintenance
+            
+            # Annual values
+            annual_revenue = monthly_revenue * 12
+            annual_operating_cost = monthly_operating_cost * 12
+            annual_maintenance = monthly_maintenance * 12
+            
+            total_revenue += annual_revenue
+            total_operating_cost += annual_operating_cost
+            total_maintenance_cost += annual_maintenance
         
+        total_cost = total_operating_cost + total_maintenance_cost
         profit = total_revenue - total_cost
         
         return {
@@ -131,9 +155,9 @@ class HybridOptimizer:
         if convergence_history:
             last_entry = convergence_history[-1]
             print("  Final generation snapshot:")
-            print(f"    Mean cost: {last_entry['mean_cost']:.0f} INR")
-            print(f"    Mean coverage: {last_entry['mean_coverage']:.1f} EVs")
-            print(f"    Mean distance: {last_entry['mean_distance']:.2f} km")
+            print(f"    Avg cost: {last_entry['avg_cost']:.0f} INR")
+            print(f"    Avg coverage: {last_entry['avg_coverage']:.1f} EVs")
+            print(f"    Avg distance: {last_entry['avg_distance']:.2f} km")
         
         print(f"  Found {len(pareto_solutions)} Pareto-optimal selections")
         

@@ -541,9 +541,14 @@ class EVCSVisualizer:
         print(f"[OK] Solution summary plot saved to {output_path}")
         plt.close()
 
-    def plot_convergence(self, convergence_history: List[Dict], output_path: str = "nsga2_convergence.png"):
+    def plot_convergence(self, convergence_history: List[Dict], output_path: str = "convergence_curve.png"):
         """
         Plot NSGA-II convergence trends generation by generation.
+        Plots:
+        1. Investment (Cost)
+        2. Coverage
+        3. Service Distance
+        4. Number of Stations
         """
         if not convergence_history:
             print("Warning: No convergence history to plot.")
@@ -552,33 +557,47 @@ class EVCSVisualizer:
         history_df = pd.DataFrame(convergence_history)
         generations = history_df['generation']
 
-        fig, axes = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
-        fig.suptitle('NSGA-II Evolution Across Generations', fontsize=16, fontweight='bold')
+        fig, axes = plt.subplots(4, 1, figsize=(12, 16), sharex=True)
+        fig.suptitle('NSGA-II Convergence: Evolution of Objectives', fontsize=16, fontweight='bold')
 
-        # Cost evolution (normalize for readability)
-        axes[0].plot(generations, history_df['mean_cost'] / 1e7, label='Mean Cost', color='#3498db', linewidth=2)
-        axes[0].plot(generations, history_df['best_cost'] / 1e7, label='Best Cost', color='#1f618d', linestyle='--', linewidth=2)
-        axes[0].set_ylabel('Cost (Crore INR)', fontsize=11, fontweight='bold')
+        # 1. Investment (Cost)
+        axes[0].plot(generations, history_df['avg_cost'] / 1e7, label='Average Investment', color='#3498db', linewidth=2)
+        axes[0].plot(generations, history_df['best_cost'] / 1e7, label='Min Investment', color='#1f618d', linestyle='--', linewidth=2)
+        axes[0].set_ylabel('Investment (Crore INR)', fontsize=11, fontweight='bold')
         axes[0].grid(True, alpha=0.3)
         axes[0].legend(loc='upper right')
+        axes[0].set_title('1. Investment (Minimize Cost)', fontsize=12)
 
-        # Coverage evolution
-        axes[1].plot(generations, history_df['mean_coverage'], label='Mean Coverage', color='#2ecc71', linewidth=2)
-        axes[1].scatter(generations, history_df['best_coverage'], label='Best Coverage', color='#196f3d', s=35, zorder=3)
+        # 2. Coverage
+        axes[1].plot(generations, history_df['avg_coverage'], label='Average Coverage', color='#2ecc71', linewidth=2)
+        axes[1].plot(generations, history_df['best_coverage'], label='Max Coverage', color='#196f3d', linestyle='--', linewidth=2)
         axes[1].set_ylabel('Coverage (EVs)', fontsize=11, fontweight='bold')
         axes[1].grid(True, alpha=0.3)
         axes[1].legend(loc='upper right')
+        axes[1].set_title('2. Coverage (Maximize Demand Served)', fontsize=12)
 
-        # Distance evolution
-        axes[2].plot(generations, history_df['mean_distance'], label='Mean Avg Distance', color='#e67e22', linewidth=2)
-        axes[2].plot(generations, history_df['best_distance'], label='Best Avg Distance', color='#ba4a00', linestyle='--', linewidth=2)
-        axes[2].set_xlabel('Generation', fontsize=12, fontweight='bold')
-        axes[2].set_ylabel('Average Distance (km)', fontsize=11, fontweight='bold')
+        # 3. Distance
+        axes[2].plot(generations, history_df['avg_distance'], label='Average Distance', color='#e67e22', linewidth=2)
+        axes[2].plot(generations, history_df['best_distance'], label='Min Distance', color='#ba4a00', linestyle='--', linewidth=2)
+        axes[2].set_ylabel('Avg Distance (km)', fontsize=11, fontweight='bold')
         axes[2].grid(True, alpha=0.3)
         axes[2].legend(loc='upper right')
+        axes[2].set_title('3. Service Distance (Minimize)', fontsize=12)
+
+        # 4. Station Count
+        if 'avg_sites' in history_df.columns:
+            axes[3].plot(generations, history_df['avg_sites'], label='Average Count', color='#9b59b6', linewidth=2)
+            axes[3].plot(generations, history_df['min_sites'], label='Min Count', color='#8e44ad', linestyle=':', linewidth=2)
+            axes[3].plot(generations, history_df['max_sites'], label='Max Count', color='#8e44ad', linestyle='--', linewidth=2)
+            axes[3].set_ylabel('Number of Stations', fontsize=11, fontweight='bold')
+            axes[3].grid(True, alpha=0.3)
+            axes[3].legend(loc='upper right')
+            axes[3].set_title('4. Network Growth (Station Count)', fontsize=12)
+        
+        axes[3].set_xlabel('Generation', fontsize=12, fontweight='bold')
 
         plt.tight_layout(rect=[0, 0, 1, 0.97])
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
-        print(f"[OK] NSGA-II convergence plot saved to {output_path}")
+        print(f"[OK] Convergence curve saved to {output_path}")
         plt.close()
 
