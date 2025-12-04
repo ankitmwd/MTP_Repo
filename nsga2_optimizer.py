@@ -277,6 +277,13 @@ class NSGA2Optimizer:
         for ind, fit in zip(population, fitnesses):
             ind.fitness.values = fit
         
+        # Initialize history tracking
+        history = {
+            'cost_mean': [], 'cost_min': [],
+            'coverage_mean': [], 'coverage_max': [],
+            'distance_mean': [], 'distance_min': []
+        }
+        
         # Evolution loop
         self.convergence_history = []
         for generation in range(self.n_generations):

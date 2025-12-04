@@ -526,7 +526,7 @@ class EVCSVisualizer:
         # Add legend for categories and grid status
         from matplotlib.patches import Patch
         unique_categories = ['High', 'Medium', 'Low', 'Very Low']
-        category_handles = [Patch(facecolor=category_colors[cat], edgecolor='black', label=cat)
+        category_handles = [Patch(facecolor=colors_cat[cat], edgecolor='black', label=cat)
                             for cat in unique_categories if cat in site_categories]
         status_handles = [
             Line2D([0], [0], marker='o', color='w', markerfacecolor='#666666', markeredgecolor='black',
